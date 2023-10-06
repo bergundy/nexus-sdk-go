@@ -26,10 +26,7 @@ func (h *successHandler) StartOperation(ctx context.Context, request *StartOpera
 		return nil, newBadRequestError("invalid 'User-Agent' header: %q", request.HTTPRequest.Header.Get("User-Agent"))
 	}
 
-	return &OperationResponseSync{
-		Header: request.HTTPRequest.Header.Clone(),
-		Body:   request.HTTPRequest.Body,
-	}, nil
+	return &OperationResponseSync{*request.Input}, nil
 }
 
 func TestSuccess(t *testing.T) {
@@ -57,7 +54,7 @@ type requestIDEchoHandler struct {
 }
 
 func (h *requestIDEchoHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
-	return &OperationResponseSync{Body: bytes.NewReader([]byte(request.RequestID))}, nil
+	return &OperationResponseSync{Message{Body: bytes.NewReader([]byte(request.RequestID))}}, nil
 }
 
 func TestClientRequestID(t *testing.T) {

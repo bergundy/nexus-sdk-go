@@ -31,3 +31,10 @@ func (h *UnimplementedHandler) GetOperationInfo(ctx context.Context, request *Ge
 func (h *UnimplementedHandler) CancelOperation(ctx context.Context, request *CancelOperationRequest) error {
 	return &HandlerError{http.StatusNotImplemented, &Failure{Message: "not implemented"}}
 }
+
+// MapCompletion implements Handler.
+func (*UnimplementedHandler) MapCompletion(context.Context, *MapCompletionRequest) (OperationCompletion, error) {
+	return nil, &HandlerError{http.StatusNotImplemented, &Failure{Message: "not implemented"}}
+}
+
+var _ Handler = &UnimplementedHandler{}

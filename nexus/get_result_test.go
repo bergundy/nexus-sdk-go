@@ -29,8 +29,10 @@ func (h *asyncWithResultHandler) getResult(request *GetOperationResultRequest) (
 		return nil, h.resultError
 	}
 	return &OperationResponseSync{
-		Header: request.HTTPRequest.Header,
-		Body:   bytes.NewReader([]byte("body")),
+		Message{
+			Header: request.HTTPRequest.Header,
+			Body:   bytes.NewReader([]byte("body")),
+		},
 	}, nil
 }
 

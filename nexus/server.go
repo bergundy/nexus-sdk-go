@@ -24,6 +24,7 @@ type StartOperationRequest struct {
 	RequestID string
 	// Callback URL to call upon completion if the started operation is async.
 	CallbackURL string
+	Input       *Message
 	// The original HTTP request.
 	// Read the URL, Header, and Body of the request to process the operation input.
 	HTTPRequest *http.Request
@@ -65,6 +66,15 @@ type CancelOperationRequest struct {
 	HTTPRequest *http.Request
 }
 
+type MapCompletionRequest struct {
+	Operation   string
+	OperationID string
+
+	Completion OperationCompletion
+
+	HTTPRequest *http.Request
+}
+
 // An OperationResponse is the return type from the handler StartOperation and GetResult methods. It has two
 // implementations: [OperationResponseSync] and [OperationResponseAsync].
 type OperationResponse interface {
@@ -73,11 +83,9 @@ type OperationResponse interface {
 
 // Indicates that an operation completed successfully.
 type OperationResponseSync struct {
-	// Header to deliver in the HTTP response.
-	Header http.Header
-	// Body conveying the operation result.
-	// If it is an [io.Closer] it will be automatically closed by the framework.
-	Body io.Reader
+	// Message to respond with.
+	// If its body is an [io.Closer] it will be automatically closed by the framework.
+	Message Message
 }
 
 // NewOperationResponseSync constructs an [OperationResponseSync], setting the proper Content-Type header.
@@ -90,20 +98,22 @@ func NewOperationResponseSync(v any) (*OperationResponseSync, error) {
 	header := make(http.Header)
 	header.Set(headerContentType, contentTypeJSON)
 	return &OperationResponseSync{
-		Header: header,
-		Body:   bytes.NewReader(b),
+		Message{
+			Header: header,
+			Body:   bytes.NewReader(b),
+		},
 	}, nil
 }
 
 func (r *OperationResponseSync) applyToHTTPResponse(writer http.ResponseWriter, handler *httpHandler) {
 	header := writer.Header()
-	for k, v := range r.Header {
+	for k, v := range r.Message.Header {
 		header[k] = v
 	}
-	if closer, ok := r.Body.(io.Closer); ok {
+	if closer, ok := r.Message.Body.(io.Closer); ok {
 		defer closer.Close()
 	}
-	if _, err := io.Copy(writer, r.Body); err != nil {
+	if _, err := io.Copy(writer, r.Message.Body); err != nil {
 		handler.logger.Error("failed to write response body", "error", err)
 	}
 }
@@ -166,6 +176,9 @@ type Handler interface {
 	//  by the underlying operation implemention.
 	//  2. idempotent - implementors should ignore duplicate cancelations for the same operation.
 	CancelOperation(context.Context, *CancelOperationRequest) error
+
+	// TODO
+	MapCompletion(context.Context, *MapCompletionRequest) (OperationCompletion, error)
 	mustEmbedUnimplementedHandler()
 }
 
@@ -189,6 +202,15 @@ func (e *HandlerError) Error() string {
 func newBadRequestError(format string, args ...any) *HandlerError {
 	return &HandlerError{
 		StatusCode: http.StatusBadRequest,
+		Failure: &Failure{
+			Message: fmt.Sprintf(format, args...),
+		},
+	}
+}
+
+func newNotFoundError(format string, args ...any) *HandlerError {
+	return &HandlerError{
+		StatusCode: http.StatusNotFound,
 		Failure: &Failure{
 			Message: fmt.Sprintf(format, args...),
 		},
@@ -261,6 +283,10 @@ func (h *httpHandler) startOperation(writer http.ResponseWriter, request *http.R
 		Operation:   operation,
 		RequestID:   request.Header.Get(headerRequestID),
 		CallbackURL: request.URL.Query().Get(queryCallbackURL),
+		Input: &Message{
+			Header: request.Header,
+			Body:   request.Body,
+		},
 		HTTPRequest: request,
 	}
 	response, err := h.options.Handler.StartOperation(request.Context(), handlerRequest)
