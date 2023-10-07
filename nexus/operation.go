@@ -5,7 +5,9 @@ import (
 	"errors"
 )
 
-type NoResult interface{}
+type NoResult interface {
+	notImplementable()
+}
 
 type Operation[I, O any] interface {
 	GetName() string
@@ -71,9 +73,9 @@ var _ OperationHandler[any, any] = &SyncOperation[any, any]{}
 
 type AsyncOperationHandler[I, O any] interface {
 	Start(context.Context, I) (*OperationResponseAsync, error)
-	Cancel(context.Context) error
-	GetResult(context.Context) (O, error)
-	GetInfo(context.Context) (*OperationInfo, error)
+	Cancel(context.Context, string) error
+	GetResult(context.Context, string) (O, error)
+	GetInfo(context.Context, string) (*OperationInfo, error)
 }
 
 type AsyncOperation[I, M, O any] struct {
@@ -94,7 +96,7 @@ func NewAsyncOperation[I, O any](name string, handler AsyncOperationHandler[I, O
 	}
 }
 
-func WithMapper[I, M, O1, O2 any](op AsyncOperation[I, M, O1], mapper func(context.Context, O1, *UnsuccessfulOperationError) (O2, *UnsuccessfulOperationError, error)) *AsyncOperation[I, M, O2] {
+func WithMapper[I, M, O1, O2 any](op *AsyncOperation[I, M, O1], mapper func(context.Context, O1, *UnsuccessfulOperationError) (O2, *UnsuccessfulOperationError, error)) *AsyncOperation[I, M, O2] {
 	return &AsyncOperation[I, M, O2]{
 		Name:    op.Name,
 		Handler: op.Handler,
@@ -111,7 +113,7 @@ func WithMapper[I, M, O1, O2 any](op AsyncOperation[I, M, O1], mapper func(conte
 
 // CancelOperation implements OperationHandler.
 func (h *AsyncOperation[I, M, O]) CancelOperation(ctx context.Context, request *CancelOperationRequest) error {
-	return h.Handler.Cancel(ctx)
+	return h.Handler.Cancel(ctx, request.OperationID)
 }
 
 // GetName implements OperationHandler.
@@ -121,7 +123,7 @@ func (h *AsyncOperation[I, M, O]) GetName() string {
 
 // GetOperationInfo implements OperationHandler.
 func (h *AsyncOperation[I, M, O]) GetOperationInfo(ctx context.Context, request *GetOperationInfoRequest) (*OperationInfo, error) {
-	return h.Handler.GetInfo(ctx)
+	return h.Handler.GetInfo(ctx, request.OperationID)
 }
 
 // MapCompletion implements Handler.
@@ -159,7 +161,8 @@ func (h *AsyncOperation[I, M, O]) MapCompletion(ctx context.Context, request *Ma
 // GetOperationResult implements OperationHandler.
 func (h *AsyncOperation[I, M, O]) GetOperationResult(ctx context.Context, request *GetOperationResultRequest) (*OperationResponseSync, error) {
 	var uoe *UnsuccessfulOperationError
-	m, err := h.Handler.GetResult(ctx)
+	// TODO: add wait
+	m, err := h.Handler.GetResult(ctx, request.OperationID)
 	if err != nil {
 		if !errors.As(err, &uoe) {
 			return nil, err
@@ -189,6 +192,7 @@ func (h *AsyncOperation[I, M, O]) StartOperation(ctx context.Context, request *S
 		return nil, newBadRequestError("invalid request payload")
 	}
 
+	// TODO: register for mapping
 	return h.Handler.Start(ctx, i)
 }
 
