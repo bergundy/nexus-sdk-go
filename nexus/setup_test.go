@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type contextKeyTest struct{}
 const testTimeout = time.Second * 5
 const getResultMaxTimeout = time.Millisecond * 300
 

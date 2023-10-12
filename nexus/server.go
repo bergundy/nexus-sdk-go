@@ -274,11 +274,12 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 }
 
 func (h *httpHandler) startOperation(writer http.ResponseWriter, request *http.Request) {
-	operation, err := url.PathUnescape(path.Base(request.URL.RawPath))
+	operation, err := url.PathUnescape(path.Base(request.URL.EscapedPath()))
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
 		return
 	}
+	fmt.Println("AAAAAAAAAAAAAAAAAA from nsdk", request.URL.Path, request.URL.EscapedPath(), operation)
 	handlerRequest := &StartOperationRequest{
 		Operation:   operation,
 		RequestID:   request.Header.Get(headerRequestID),
@@ -299,7 +300,7 @@ func (h *httpHandler) startOperation(writer http.ResponseWriter, request *http.R
 
 func (h *httpHandler) getOperationResult(writer http.ResponseWriter, request *http.Request) {
 	// strip /result
-	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.RawPath))
+	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.EscapedPath()))
 	operationID, err := url.PathUnescape(operationIDEscaped)
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
@@ -342,7 +343,7 @@ func (h *httpHandler) getOperationResult(writer http.ResponseWriter, request *ht
 }
 
 func (h *httpHandler) getOperationInfo(writer http.ResponseWriter, request *http.Request) {
-	prefix, operationIDEscaped := path.Split(request.URL.RawPath)
+	prefix, operationIDEscaped := path.Split(request.URL.EscapedPath())
 	operationID, err := url.PathUnescape(operationIDEscaped)
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
@@ -374,7 +375,7 @@ func (h *httpHandler) getOperationInfo(writer http.ResponseWriter, request *http
 
 func (h *httpHandler) cancelOperation(writer http.ResponseWriter, request *http.Request) {
 	// strip /cancel
-	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.RawPath))
+	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.EscapedPath()))
 	operationID, err := url.PathUnescape(operationIDEscaped)
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))

@@ -26,7 +26,7 @@ func NewServiceHandler(options ServiceHandlerOptions) (*ServiceHandler, error) {
 		operations[op.GetName()] = op
 	}
 	if options.Codec == nil {
-		options.Codec = DefaultCodec{}
+		options.Codec = DefaultCodec
 	}
 	return &ServiceHandler{
 		operations: operations,
@@ -36,6 +36,7 @@ func NewServiceHandler(options ServiceHandlerOptions) (*ServiceHandler, error) {
 
 // CancelOperation implements Handler.
 func (h *ServiceHandler) CancelOperation(ctx context.Context, request *CancelOperationRequest) error {
+	ctx = WithCodec(ctx, h.codec)
 	if op, found := h.operations[request.Operation]; found {
 		return op.CancelOperation(ctx, request)
 	}
@@ -44,6 +45,7 @@ func (h *ServiceHandler) CancelOperation(ctx context.Context, request *CancelOpe
 
 // MapCompletion implements Handler.
 func (h *ServiceHandler) MapCompletion(ctx context.Context, request *MapCompletionRequest) (OperationCompletion, error) {
+	ctx = WithCodec(ctx, h.codec)
 	if op, found := h.operations[request.Operation]; found {
 		return op.MapCompletion(ctx, request)
 	}
@@ -52,6 +54,7 @@ func (h *ServiceHandler) MapCompletion(ctx context.Context, request *MapCompleti
 
 // GetOperationInfo implements Handler.
 func (h *ServiceHandler) GetOperationInfo(ctx context.Context, request *GetOperationInfoRequest) (*OperationInfo, error) {
+	ctx = WithCodec(ctx, h.codec)
 	if op, found := h.operations[request.Operation]; found {
 		return op.GetOperationInfo(ctx, request)
 	}
@@ -60,6 +63,7 @@ func (h *ServiceHandler) GetOperationInfo(ctx context.Context, request *GetOpera
 
 // GetOperationResult implements Handler.
 func (h *ServiceHandler) GetOperationResult(ctx context.Context, request *GetOperationResultRequest) (*OperationResponseSync, error) {
+	ctx = WithCodec(ctx, h.codec)
 	if op, found := h.operations[request.Operation]; found {
 		return op.GetOperationResult(ctx, request)
 	}
@@ -68,6 +72,7 @@ func (h *ServiceHandler) GetOperationResult(ctx context.Context, request *GetOpe
 
 // StartOperation implements Handler.
 func (h *ServiceHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
+	ctx = WithCodec(ctx, h.codec)
 	if op, found := h.operations[request.Operation]; found {
 		return op.StartOperation(ctx, request)
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -44,6 +45,34 @@ type Codec interface {
 	FailureCodec
 	ByteCodec
 }
+
+type NilCodec struct{}
+
+// Encode implements Codec.
+func (NilCodec) FromMessage(m *Message, v any) error {
+	fmt.Println("nil codec", m.Header)
+	// TODO: figure out a better convention here
+	if m.Header.Get("Content-Type") != "" {
+		return ErrEncodingNotSupported
+	}
+	return nil
+}
+
+// Decode implements Codec.
+func (NilCodec) ToMessage(v any) (*Message, error) {
+	// TODO: probably need a better check here
+	if v != nil {
+		return nil, ErrEncodingNotSupported
+	}
+	body := bytes.NewBuffer(nil)
+	return &Message{
+		// TODO: figure out a better convention here
+		Header: http.Header{},
+		Body:   body,
+	}, nil
+}
+
+var _ MessageCodec = NilCodec{}
 
 type JSONCodec struct{}
 
@@ -94,10 +123,14 @@ func (DefaultErrorCodec) DecodeBytes(m *Message) (*Message, error) {
 	return m, nil
 }
 
-type DefaultCodec struct {
+type defaultCodec struct {
 	DefaultErrorCodec
-	JSONCodec
+	MessageCodecChain
 	DefaultByteCodec
+}
+
+var DefaultCodec = defaultCodec{
+	MessageCodecChain: MessageCodecChain([]MessageCodec{NilCodec{}, JSONCodec{}}),
 }
 
 type contextKeyCodec struct{}
@@ -134,4 +167,34 @@ func (c ByteCodecChain) DecodeBytes(m *Message) (*Message, error) {
 		}
 	}
 	return m, nil
+}
+
+type MessageCodecChain []MessageCodec
+
+func (c MessageCodecChain) ToMessage(v any) (*Message, error) {
+	for _, l := range c {
+		m, err := l.ToMessage(v)
+		if err != nil {
+			if errors.Is(err, ErrEncodingNotSupported) {
+				continue
+			}
+		}
+		return m, err
+	}
+	return nil, ErrEncodingNotSupported
+}
+
+func (c MessageCodecChain) FromMessage(m *Message, v any) error {
+	lenc := len(c)
+	for i := range c {
+		l := c[lenc-i-1]
+		err := l.FromMessage(m, v)
+		if err != nil {
+			if errors.Is(err, ErrEncodingNotSupported) {
+				continue
+			}
+		}
+		return err
+	}
+	return ErrEncodingNotSupported
 }

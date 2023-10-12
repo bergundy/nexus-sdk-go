@@ -5,7 +5,7 @@ import (
 	"errors"
 )
 
-type NoResult interface {
+type Void interface {
 	notImplementable()
 }
 
