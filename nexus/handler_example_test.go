@@ -82,7 +82,7 @@ func (h *myHandler) peekOperation(ctx context.Context) (*MyResult, error) {
 func (h *myHandler) authorize(ctx context.Context, request *http.Request) error {
 	// Authorization for demo purposes
 	if request.Header.Get("Authorization") != "Bearer top-secret" {
-		return &nexus.HandlerError{StatusCode: http.StatusUnauthorized, Failure: &nexus.Failure{Message: "Unauthorized"}}
+		return &nexus.HandlerError{Type: nexus.HandlerErrorTypeUnauthorized, Failure: &nexus.Failure{Message: "Unauthorized"}}
 	}
 	return nil
 }

@@ -2,7 +2,6 @@ package nexus
 
 import (
 	"context"
-	"net/http"
 )
 
 // UnimplementedHandler must be embedded into any [Handler] implementation for future compatibility.
@@ -14,20 +13,20 @@ func (h *UnimplementedHandler) mustEmbedUnimplementedHandler() {}
 
 // StartOperation implements the Handler interface.
 func (h *UnimplementedHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
-	return nil, &HandlerError{http.StatusNotImplemented, &Failure{Message: "not implemented"}}
+	return nil, &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }
 
 // GetOperationResult implements the Handler interface.
 func (h *UnimplementedHandler) GetOperationResult(ctx context.Context, request *GetOperationResultRequest) (*OperationResponseSync, error) {
-	return nil, &HandlerError{http.StatusNotImplemented, &Failure{Message: "not implemented"}}
+	return nil, &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }
 
 // GetOperationInfo implements the Handler interface.
 func (h *UnimplementedHandler) GetOperationInfo(ctx context.Context, request *GetOperationInfoRequest) (*OperationInfo, error) {
-	return nil, &HandlerError{http.StatusNotImplemented, &Failure{Message: "not implemented"}}
+	return nil, &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }
 
 // CancelOperation implements the Handler interface.
 func (h *UnimplementedHandler) CancelOperation(ctx context.Context, request *CancelOperationRequest) error {
-	return &HandlerError{http.StatusNotImplemented, &Failure{Message: "not implemented"}}
+	return &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }

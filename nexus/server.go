@@ -169,26 +169,57 @@ type Handler interface {
 	mustEmbedUnimplementedHandler()
 }
 
+type HandlerErrorType string
+
+const (
+	// The associated operation completed as canceled.
+	HandlerErrorTypeOperationCanceled HandlerErrorType = "OPERATION_CANCELED"
+	// The associated operation failed.
+	HandlerErrorTypeOperationFailed HandlerErrorType = "OPERATION_FAILED"
+	// A generic error message, given when an unexpected condition was encountered and no more specific message is
+	// suitable.
+	HandlerErrorTypeInternal HandlerErrorType = "INTERNAL"
+	// Used by gateways to report that an upstream server has responded with an error.
+	HandlerErrorTypeApplicationError HandlerErrorType = "APPLICATION_ERROR"
+	// Used by gateways to report that a request to an upstream server has timed out.
+	HandlerErrorTypeApplicationTimeout HandlerErrorType = "APPLICATION_TIMEOUT"
+	// The client did not supply valid authentication credentials for this request.
+	HandlerErrorTypeUnauthenticated HandlerErrorType = "UNAUTHENTICATED"
+	// The caller does not have permission to execute the specified operation.
+	HandlerErrorTypeUnauthorized HandlerErrorType = "UNAUTHORIZED"
+	// The server cannot or will not process the request due to an apparent client error.
+	HandlerErrorTypeBadRequest HandlerErrorType = "BAD_REQUEST"
+	// The requested resource could not be found but may be available in the future. Subsequent requests by the client
+	// are permissible.
+	HandlerErrorTypeNotFound HandlerErrorType = "NOT_FOUND"
+	// The server either does not recognize the request method, or it lacks the ability to fulfill the request.
+	HandlerErrorTypeNotImplemented HandlerErrorType = "NOT_IMPLEMENTED"
+)
+
 // HandlerError is a special error that can be returned from [Handler] methods for failing an HTTP request with a custom
 // status code and failure message.
 type HandlerError struct {
-	// Defaults to 500.
-	StatusCode int
+	// Defaults to HandlerErrorTypeInternal
+	Type HandlerErrorType
 	// Failure to report back in the response. Optional.
 	Failure *Failure
 }
 
 // Error implements the error interface.
 func (e *HandlerError) Error() string {
-	if e.Failure != nil {
-		return fmt.Sprintf("handler error (%d): %s", e.StatusCode, e.Failure.Message)
+	typ := e.Type
+	if len(typ) == 0 {
+		typ = HandlerErrorTypeInternal
 	}
-	return fmt.Sprintf("handler error (%d)", e.StatusCode)
+	if e.Failure != nil {
+		return fmt.Sprintf("handler error (%s): %s", typ, e.Failure.Message)
+	}
+	return fmt.Sprintf("handler error (%s)", typ)
 }
 
 func newBadRequestError(format string, args ...any) *HandlerError {
 	return &HandlerError{
-		StatusCode: http.StatusBadRequest,
+		Type: HandlerErrorTypeBadRequest,
 		Failure: &Failure{
 			Message: fmt.Sprintf(format, args...),
 		},
@@ -225,7 +256,29 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 		}
 	} else if errors.As(err, &handlerError) {
 		failure = handlerError.Failure
-		statusCode = handlerError.StatusCode
+		switch handlerError.Type {
+		case HandlerErrorTypeOperationCanceled:
+			writer.Header().Set(headerOperationState, string(OperationStateCanceled))
+			statusCode = statusOperationFailed
+		case HandlerErrorTypeApplicationTimeout:
+			statusCode = 521 // TODO: const
+		case HandlerErrorTypeApplicationError:
+			statusCode = 520 // TODO: const
+		case HandlerErrorTypeBadRequest:
+			statusCode = http.StatusBadRequest
+		case HandlerErrorTypeUnauthorized:
+			statusCode = http.StatusForbidden
+		case HandlerErrorTypeUnauthenticated:
+			statusCode = http.StatusUnauthorized
+		case HandlerErrorTypeNotFound:
+			statusCode = http.StatusNotFound
+		case HandlerErrorTypeNotImplemented:
+			statusCode = http.StatusNotImplemented
+		case HandlerErrorTypeInternal:
+			statusCode = http.StatusInternalServerError
+		default:
+			h.logger.Error("unexpected handler error type", "type", handlerError.Type)
+		}
 	} else {
 		failure = &Failure{
 			Message: "internal server error",
