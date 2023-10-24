@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ type ClientOptions struct {
 	// A function for making HTTP requests.
 	// Defaults to [http.DefaultClient.Do].
 	HTTPCaller func(*http.Request) (*http.Response, error)
+	Codec      Codec
 }
 
 // User-Agent header set on HTTP requests.
@@ -105,6 +107,9 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if serviceBaseURL.Scheme != "http" && serviceBaseURL.Scheme != "https" {
 		return nil, errInvalidURLScheme
 	}
+	if options.Codec == nil {
+		options.Codec = DefaultCodec
+	}
 
 	return &Client{
 		options:        options,
@@ -114,8 +119,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 // StartOperationOptions is input for [Client.StartOperation].
 type StartOperationOptions struct {
-	// Name of the operation to start.
-	Operation string
 	// Callback URL to provide to the handle for receiving async operation completions. Optional.
 	// Implement a [CompletionHandler] and expose it as an HTTP handler to handle async completions.
 	CallbackURL string
@@ -124,27 +127,6 @@ type StartOperationOptions struct {
 	RequestID string
 	// Header to attach to the HTTP request. Optional.
 	Header http.Header
-	// Body of the operation request.
-	// If it is an [io.Closer], the body will be automatically closed by the client.
-	Body io.Reader
-}
-
-// NewStartOperationOptions is shorthand for creating a [StartOperationOptions] struct with a JSON body. Marshals the
-// provided value to JSON using [json.Marshal] and sets the proper Content-Type header.
-func NewStartOperationOptions(operation string, v any) (options StartOperationOptions, err error) {
-	if operation == "" {
-		err = errEmptyOperationName
-		return
-	}
-	var b []byte
-	b, err = json.Marshal(v)
-	if err != nil {
-		return
-	}
-	options.Operation = operation
-	options.Header = http.Header{headerContentType: []string{contentTypeJSON}}
-	options.Body = bytes.NewReader(b)
-	return
 }
 
 // StartOperationResult is the return value of [Client.StartOperation].
@@ -153,7 +135,7 @@ type StartOperationResult struct {
 	// Set when start completes synchronously and successfully.
 	//
 	// ⚠️ The response body must be read in its entirety and closed to free up the underlying connection.
-	Successful *http.Response
+	Successful *EncodedStream
 	// Set when the handler indicates that it started an asynchronous operation.
 	// The attached handle can be used to perform actions such as cancel the operation or get its result.
 	Pending *OperationHandle
@@ -175,22 +157,30 @@ type StartOperationResult struct {
 //     [UnsuccessfulOperationError].
 //
 //  4. Any other failure.
-func (c *Client) StartOperation(ctx context.Context, options StartOperationOptions) (*StartOperationResult, error) {
-	if closer, ok := options.Body.(io.Closer); ok {
-		// Close the request body in case we error before sending the HTTP request (which may double close but that's fine since we ignore the error).
-		defer closer.Close()
+func (c *Client) StartOperation(ctx context.Context, operation string, input any, options StartOperationOptions) (*StartOperationResult, error) {
+	var stream *Stream
+	if s, ok := input.(*Stream); ok {
+		if closer, ok := stream.Reader.(io.Closer); ok {
+			// Close the request body in case we error before sending the HTTP request (which may double close but
+			// that's fine since we ignore the error).
+			defer closer.Close()
+		}
+		stream = s
+	} else {
+		var err error
+		if stream, err = c.options.Codec.Serialize(input); err != nil {
+			return nil, err
+		}
 	}
-	if options.Operation == "" {
-		return nil, errEmptyOperationName
-	}
-	url := c.serviceBaseURL.JoinPath(url.PathEscape(options.Operation))
+
+	url := c.serviceBaseURL.JoinPath(url.PathEscape(operation))
 
 	if options.CallbackURL != "" {
 		q := url.Query()
 		q.Set(queryCallbackURL, options.CallbackURL)
 		url.RawQuery = q.Encode()
 	}
-	request, err := http.NewRequestWithContext(ctx, "POST", url.String(), options.Body)
+	request, err := http.NewRequestWithContext(ctx, "POST", url.String(), stream.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -209,14 +199,29 @@ func (c *Client) StartOperation(ctx context.Context, options StartOperationOptio
 	request.Header.Set(headerRequestID, options.RequestID)
 	request.Header.Set(headerUserAgent, userAgent)
 
+	for k, v := range stream.Header {
+		// TODO: add Content- prefix?
+		request.Header.Set(k, v)
+	}
+
 	response, err := c.options.HTTPCaller(request)
 	if err != nil {
 		return nil, err
 	}
 	// Do not close response body here to allow successful result to read it.
 	if response.StatusCode == http.StatusOK {
+		header := make(map[string]string)
+		for k, v := range response.Header {
+			if strings.HasPrefix(k, "Content-") {
+				// TODO: some headers may have multiple values...
+				header[k] = v[0]
+			}
+		}
 		return &StartOperationResult{
-			Successful: response,
+			Successful: &EncodedStream{
+				codec:  c.options.Codec,
+				stream: &Stream{Header: header, Reader: response.Body},
+			},
 		}, nil
 	}
 
@@ -237,7 +242,7 @@ func (c *Client) StartOperation(ctx context.Context, options StartOperationOptio
 		}
 		return &StartOperationResult{
 			Pending: &OperationHandle{
-				Operation: options.Operation,
+				Operation: operation,
 				ID:        info.ID,
 				client:    c,
 			},
@@ -264,8 +269,6 @@ func (c *Client) StartOperation(ctx context.Context, options StartOperationOptio
 
 // ExecuteOperationOptions is input for [Client.ExecuteOperation].
 type ExecuteOperationOptions struct {
-	// Name of the operation to start.
-	Operation string
 	// Callback URL to provide to the handle for receiving async operation completions. Optional.
 	// Even though Client.ExecuteOperation waits for operation completion, some application may want to set this
 	// callback as a fallback mechanism.
@@ -273,9 +276,6 @@ type ExecuteOperationOptions struct {
 	// Request ID that may be used by the server handler to dedupe this start request.
 	// By default a v4 UUID will be generated by the client.
 	RequestID string
-	// Body of the operation request.
-	// If it is an [io.Closer], the body is guaranteed to be closed in Client.ExecuteOperation.
-	Body io.Reader
 	// Header to attach to start and get-result HTTP requests. Optional.
 	// Content-Type will be deleted in the get-result request.
 	Header http.Header
@@ -285,40 +285,16 @@ type ExecuteOperationOptions struct {
 	Wait time.Duration
 }
 
-// NewExecuteOperationOptions is shorthand for creating an [ExecuteOperationOptions] struct with a JSON body. Marshals
-// the provided value to JSON using [json.Marshal] and sets the proper Content-Type header.
-func NewExecuteOperationOptions(operation string, v any) (options ExecuteOperationOptions, err error) {
-	if operation == "" {
-		err = errEmptyOperationName
-		return
-	}
-	var b []byte
-	b, err = json.Marshal(v)
-	if err != nil {
-		return
-	}
-	options.Operation = operation
-	options.Header = http.Header{headerContentType: []string{contentTypeJSON}}
-	options.Body = bytes.NewReader(b)
-	return
-}
-
 func (o *ExecuteOperationOptions) intoStartOptions() StartOperationOptions {
 	return StartOperationOptions{
-		Operation:   o.Operation,
 		CallbackURL: o.CallbackURL,
 		RequestID:   o.RequestID,
 		Header:      o.Header,
-		Body:        o.Body,
 	}
 }
 
 func (o *ExecuteOperationOptions) intoGetResultOptions() (options GetOperationResultOptions) {
 	options.Header = o.Header
-	if options.Header != nil {
-		options.Header = options.Header.Clone()
-		options.Header.Del(headerContentType)
-	}
 	if o.Wait <= 0 {
 		options.Wait = time.Duration(math.MaxInt64)
 	} else {
@@ -341,8 +317,8 @@ func (o *ExecuteOperationOptions) intoGetResultOptions() (options GetOperationRe
 //
 // ⚠️ If this method completes successfully, the returned response's body must be read in its entirety and closed to
 // free up the underlying connection.
-func (c *Client) ExecuteOperation(ctx context.Context, request ExecuteOperationOptions) (*http.Response, error) {
-	result, err := c.StartOperation(ctx, request.intoStartOptions())
+func (c *Client) ExecuteOperation(ctx context.Context, operation string, input any, request ExecuteOperationOptions) (*EncodedStream, error) {
+	result, err := c.StartOperation(ctx, operation, input, request.intoStartOptions())
 	if err != nil {
 		return nil, err
 	}

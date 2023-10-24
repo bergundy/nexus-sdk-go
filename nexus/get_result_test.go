@@ -3,7 +3,6 @@ package nexus
 import (
 	"bytes"
 	"context"
-	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -29,7 +28,7 @@ func (h *asyncWithResultHandler) getResult(request *GetOperationResultRequest) (
 		return nil, h.resultError
 	}
 	return &OperationResponseSync{
-		Header: request.HTTPRequest.Header,
+		Header: http.Header{"Content-Type": []string{"application/octet-stream"}},
 		Body:   bytes.NewReader([]byte("body")),
 	}, nil
 }
@@ -71,17 +70,14 @@ func TestWaitResult(t *testing.T) {
 	ctx, client, teardown := setup(t, &handler)
 	defer teardown()
 
-	response, err := client.ExecuteOperation(ctx, ExecuteOperationOptions{
-		Operation: "f/o/o",
+	response, err := client.ExecuteOperation(ctx, "f/o/o", nil, ExecuteOperationOptions{
 		Header: http.Header{
-			"foo":          []string{"bar"},
-			"Content-Type": []string{"checking that this gets unset in the get-result request"},
+			"foo": []string{"bar"},
 		},
 	})
 	require.NoError(t, err)
-	defer response.Body.Close()
-	require.Equal(t, "bar", response.Header.Get("foo"))
-	body, err := io.ReadAll(response.Body)
+	var body []byte
+	err = response.Read(&body)
 	require.NoError(t, err)
 	require.Equal(t, []byte("body"), body)
 
@@ -96,7 +92,7 @@ func TestWaitResult_StillRunning(t *testing.T) {
 	ctx, client, teardown := setup(t, &asyncWithResultHandler{timesToBlock: 1000})
 	defer teardown()
 
-	result, err := client.StartOperation(ctx, StartOperationOptions{Operation: "foo"})
+	result, err := client.StartOperation(ctx, "foo", nil, StartOperationOptions{})
 	require.NoError(t, err)
 	handle := result.Pending
 	require.NotNil(t, handle)
@@ -110,7 +106,7 @@ func TestWaitResult_DeadlineExceeded(t *testing.T) {
 	ctx, client, teardown := setup(t, &asyncWithResultHandler{timesToBlock: 1000})
 	defer teardown()
 
-	result, err := client.StartOperation(ctx, StartOperationOptions{Operation: "foo"})
+	result, err := client.StartOperation(ctx, "foo", nil, StartOperationOptions{})
 	require.NoError(t, err)
 	handle := result.Pending
 	require.NotNil(t, handle)
@@ -143,8 +139,8 @@ func TestPeekResult_Success(t *testing.T) {
 	require.NoError(t, err)
 	response, err := handle.GetResult(ctx, GetOperationResultOptions{})
 	require.NoError(t, err)
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
+	var body []byte
+	err = response.Read(&body)
 	require.NoError(t, err)
 	require.Equal(t, []byte("body"), body)
 }

@@ -39,9 +39,7 @@ func TestCancel_HandleFromStart(t *testing.T) {
 	ctx, client, teardown := setup(t, &asyncWithCancelHandler{expectHeader: true})
 	defer teardown()
 
-	result, err := client.StartOperation(ctx, StartOperationOptions{
-		Operation: "f/o/o",
-	})
+	result, err := client.StartOperation(ctx, "f/o/o", nil, StartOperationOptions{})
 	require.NoError(t, err)
 	handle := result.Pending
 	require.NotNil(t, handle)

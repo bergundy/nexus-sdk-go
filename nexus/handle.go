@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -80,7 +81,7 @@ type GetOperationResultOptions struct {
 // context deadline to the max allowed wait period to ensure this call returns in a timely fashion.
 //
 // ⚠️ If a response is returned, its body must be read in its entirety and closed to free up the underlying connection.
-func (h *OperationHandle) GetResult(ctx context.Context, options GetOperationResultOptions) (*http.Response, error) {
+func (h *OperationHandle) GetResult(ctx context.Context, options GetOperationResultOptions) (*EncodedStream, error) {
 	url := h.client.serviceBaseURL.JoinPath(url.PathEscape(h.Operation), url.PathEscape(h.ID), "result")
 	request, err := http.NewRequestWithContext(ctx, "GET", url.String(), nil)
 	if err != nil {
@@ -118,8 +119,19 @@ func (h *OperationHandle) GetResult(ctx context.Context, options GetOperationRes
 				wait = options.Wait - time.Since(startTime)
 				continue
 			}
+			return nil, err
 		}
-		return response, err
+		header := make(map[string]string)
+		for k, v := range response.Header {
+			if strings.HasPrefix(k, "Content-") {
+				// TODO:
+				header[k] = v[0]
+			}
+		}
+		return &EncodedStream{
+			codec:  h.client.options.Codec,
+			stream: &Stream{Header: header, Reader: response.Body},
+		}, nil
 	}
 }
 

@@ -42,9 +42,7 @@ func TestGetHandlerFromStartInfoHeader(t *testing.T) {
 	ctx, client, teardown := setup(t, &asyncWithInfoHandler{expectHeader: true})
 	defer teardown()
 
-	result, err := client.StartOperation(ctx, StartOperationOptions{
-		Operation: "escape/me",
-	})
+	result, err := client.StartOperation(ctx, "escape/me", nil, StartOperationOptions{})
 	require.NoError(t, err)
 	handle := result.Pending
 	require.NotNil(t, handle)
