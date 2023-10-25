@@ -22,11 +22,11 @@ func (h *UnimplementedHandler) GetOperationResult(ctx context.Context, operation
 }
 
 // GetOperationInfo implements the Handler interface.
-func (h *UnimplementedHandler) GetOperationInfo(ctx context.Context, request *GetOperationInfoRequest) (*OperationInfo, error) {
+func (h *UnimplementedHandler) GetOperationInfo(ctx context.Context, operation, operationID string, options GetOperationInfoOptions) (*OperationInfo, error) {
 	return nil, &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }
 
 // CancelOperation implements the Handler interface.
-func (h *UnimplementedHandler) CancelOperation(ctx context.Context, request *CancelOperationRequest) error {
+func (h *UnimplementedHandler) CancelOperation(ctx context.Context, operation, operationID string, options CancelOperationOptions) error {
 	return &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }

@@ -29,3 +29,16 @@ type GetOperationResultOptions struct {
 	// turning the request into a long poll.
 	Wait time.Duration
 }
+
+// GetOperationInfoOptions are options for [OperationHandle.GetInfo] and [Handler.GetOperationInfo].
+type GetOperationInfoOptions struct {
+	// Header to attach to the HTTP request. Optional.
+	Header http.Header
+}
+
+// CancelOperationOptions are options for [OperationHandle.Cancel] and [Handler.CancelOperation].
+type CancelOperationOptions struct {
+	// Header to attach to the HTTP request. Optional.
+	Header http.Header
+}
+

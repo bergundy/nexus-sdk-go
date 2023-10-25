@@ -19,18 +19,18 @@ func (h *asyncWithCancelHandler) StartOperation(ctx context.Context, operation s
 	}, nil
 }
 
-func (h *asyncWithCancelHandler) CancelOperation(ctx context.Context, request *CancelOperationRequest) error {
-	if request.Operation != "f/o/o" {
-		return newBadRequestError("expected operation to be 'foo', got: %s", request.Operation)
+func (h *asyncWithCancelHandler) CancelOperation(ctx context.Context, operation, operationID string, options CancelOperationOptions) error {
+	if operation != "f/o/o" {
+		return newBadRequestError("expected operation to be 'foo', got: %s", operation)
 	}
-	if request.OperationID != "a/sync" {
-		return newBadRequestError("expected operation ID to be 'async', got: %s", request.OperationID)
+	if operationID != "a/sync" {
+		return newBadRequestError("expected operation ID to be 'async', got: %s", operationID)
 	}
-	if h.expectHeader && request.HTTPRequest.Header.Get("foo") != "bar" {
+	if h.expectHeader && options.Header.Get("foo") != "bar" {
 		return newBadRequestError("invalid 'foo' request header")
 	}
-	if request.HTTPRequest.Header.Get("User-Agent") != userAgent {
-		return newBadRequestError("invalid 'User-Agent' header: %q", request.HTTPRequest.Header.Get("User-Agent"))
+	if options.Header.Get("User-Agent") != userAgent {
+		return newBadRequestError("invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
 	}
 	return nil
 }

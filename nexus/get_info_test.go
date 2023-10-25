@@ -19,21 +19,21 @@ func (h *asyncWithInfoHandler) StartOperation(ctx context.Context, operation str
 	}, nil
 }
 
-func (h *asyncWithInfoHandler) GetOperationInfo(ctx context.Context, request *GetOperationInfoRequest) (*OperationInfo, error) {
-	if request.Operation != "escape/me" {
-		return nil, newBadRequestError("expected operation to be 'escape me', got: %s", request.Operation)
+func (h *asyncWithInfoHandler) GetOperationInfo(ctx context.Context, operation, operationID string, options GetOperationInfoOptions) (*OperationInfo, error) {
+	if operation != "escape/me" {
+		return nil, newBadRequestError("expected operation to be 'escape me', got: %s", operation)
 	}
-	if request.OperationID != "needs /URL/ escaping" {
-		return nil, newBadRequestError("expected operation ID to be 'needs URL escaping', got: %s", request.OperationID)
+	if operationID != "needs /URL/ escaping" {
+		return nil, newBadRequestError("expected operation ID to be 'needs URL escaping', got: %s", operationID)
 	}
-	if h.expectHeader && request.HTTPRequest.Header.Get("foo") != "bar" {
+	if h.expectHeader && options.Header.Get("foo") != "bar" {
 		return nil, newBadRequestError("invalid 'foo' request header")
 	}
-	if request.HTTPRequest.Header.Get("User-Agent") != userAgent {
-		return nil, newBadRequestError("invalid 'User-Agent' header: %q", request.HTTPRequest.Header.Get("User-Agent"))
+	if options.Header.Get("User-Agent") != userAgent {
+		return nil, newBadRequestError("invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
 	}
 	return &OperationInfo{
-		ID:    request.OperationID,
+		ID:    operationID,
 		State: OperationStateCanceled,
 	}, nil
 }

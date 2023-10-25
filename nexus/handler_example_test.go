@@ -61,12 +61,12 @@ func (h *myHandler) GetOperationResult(ctx context.Context, operation, operation
 	}
 }
 
-func (h *myHandler) CancelOperation(ctx context.Context, request *nexus.CancelOperationRequest) error {
+func (h *myHandler) CancelOperation(ctx context.Context, operation, operationID string, options nexus.CancelOperationOptions) error {
 	// Handlers must implement this.
 	panic("unimplemented")
 }
 
-func (h *myHandler) GetOperationInfo(ctx context.Context, request *nexus.GetOperationInfoRequest) (*nexus.OperationInfo, error) {
+func (h *myHandler) GetOperationInfo(ctx context.Context, operation, operationID string, options nexus.GetOperationInfoOptions) (*nexus.OperationInfo, error) {
 	// Handlers must implement this.
 	panic("unimplemented")
 }

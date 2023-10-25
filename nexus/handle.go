@@ -21,12 +21,6 @@ type OperationHandle struct {
 	client *Client
 }
 
-// GetOperationInfoOptions are options for [OperationHandle.GetInfo].
-type GetOperationInfoOptions struct {
-	// Header to attach to the HTTP request. Optional.
-	Header http.Header
-}
-
 // GetInfo gets operation information, issuing a network request to the service handler.
 func (h *OperationHandle) GetInfo(ctx context.Context, options GetOperationInfoOptions) (*OperationInfo, error) {
 	url := h.client.serviceBaseURL.JoinPath(url.PathEscape(h.Operation), url.PathEscape(h.ID))
@@ -164,12 +158,6 @@ func (h *OperationHandle) sendGetOperationRequest(ctx context.Context, request *
 	default:
 		return nil, newUnexpectedResponseError(fmt.Sprintf("unexpected response status: %q", response.Status), response, body)
 	}
-}
-
-// CancelOperationOptions are options for [OperationHandle.Cancel].
-type CancelOperationOptions struct {
-	// Header to attach to the HTTP request. Optional.
-	Header http.Header
 }
 
 // Cancel requests to cancel an asynchronous operation.
