@@ -57,14 +57,6 @@ func (h *OperationHandle) GetInfo(ctx context.Context, options GetOperationInfoO
 	return operationInfoFromResponse(response, body)
 }
 
-// GetOperationResultOptions are Options for [OperationHandle.GetResult].
-type GetOperationResultOptions struct {
-	// Header to attach to the HTTP request. Optional.
-	Header http.Header
-	// Duration to wait for operation completion. Zero or negative value implies no wait.
-	Wait time.Duration
-}
-
 // GetResult gets the result of an operation, issuing a network request to the service handler.
 //
 // By default, GetResult returns (nil, [ErrOperationStillRunning]) immediately after issuing a call if the operation has

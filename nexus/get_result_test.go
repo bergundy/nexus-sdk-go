@@ -9,11 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type request struct {
+	options     GetOperationResultOptions
+	operation   string
+	operationID string
+}
 type asyncWithResultHandler struct {
 	UnimplementedHandler
 	timesToBlock int
 	resultError  error
-	requests     []*GetOperationResultRequest
+	requests     []request
 }
 
 func (h *asyncWithResultHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
@@ -22,28 +27,26 @@ func (h *asyncWithResultHandler) StartOperation(ctx context.Context, operation s
 	}, nil
 }
 
-func (h *asyncWithResultHandler) getResult(request *GetOperationResultRequest) (*OperationResponseSync, error) {
+func (h *asyncWithResultHandler) getResult() (any, error) {
 	if h.resultError != nil {
 		return nil, h.resultError
 	}
-	return &OperationResponseSync{
-		Value: []byte("body"),
-	}, nil
+	return []byte("body"), nil
 }
 
-func (h *asyncWithResultHandler) GetOperationResult(ctx context.Context, request *GetOperationResultRequest) (*OperationResponseSync, error) {
-	h.requests = append(h.requests, request)
+func (h *asyncWithResultHandler) GetOperationResult(ctx context.Context, operation, operationID string, options GetOperationResultOptions) (any, error) {
+	h.requests = append(h.requests, request{options: options, operation: operation, operationID: operationID})
 
-	if request.HTTPRequest.Header.Get("User-Agent") != userAgent {
-		return nil, newBadRequestError("invalid 'User-Agent' header: %q", request.HTTPRequest.Header.Get("User-Agent"))
+	if options.Header.Get("User-Agent") != userAgent {
+		return nil, newBadRequestError("invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
 	}
-	if request.HTTPRequest.Header.Get("Content-Type") != "" {
+	if options.Header.Get("Content-Type") != "" {
 		return nil, newBadRequestError("'Content-Type' header set on request")
 	}
-	if request.Wait == 0 {
-		return h.getResult(request)
+	if options.Wait == 0 {
+		return h.getResult()
 	}
-	if request.Wait > 0 {
+	if options.Wait > 0 {
 		deadline, set := ctx.Deadline()
 		if !set {
 			return nil, newBadRequestError("context deadline unset")
@@ -55,12 +58,12 @@ func (h *asyncWithResultHandler) GetOperationResult(ctx context.Context, request
 		}
 	}
 	if len(h.requests) <= h.timesToBlock {
-		ctx, cancel := context.WithTimeout(ctx, request.Wait)
+		ctx, cancel := context.WithTimeout(ctx, options.Wait)
 		defer cancel()
 		<-ctx.Done()
 		return nil, ErrOperationStillRunning
 	}
-	return h.getResult(request)
+	return h.getResult()
 }
 
 func TestWaitResult(t *testing.T) {
@@ -80,10 +83,10 @@ func TestWaitResult(t *testing.T) {
 	require.Equal(t, []byte("body"), body)
 
 	require.Equal(t, 2, len(handler.requests))
-	require.InDelta(t, testTimeout+getResultContextPadding, handler.requests[0].Wait, float64(time.Millisecond*50))
-	require.InDelta(t, testTimeout+getResultContextPadding-getResultMaxTimeout, handler.requests[1].Wait, float64(time.Millisecond*50))
-	require.Equal(t, "f/o/o", handler.requests[0].Operation)
-	require.Equal(t, "a/sync", handler.requests[0].OperationID)
+	require.InDelta(t, testTimeout+getResultContextPadding, handler.requests[0].options.Wait, float64(time.Millisecond*50))
+	require.InDelta(t, testTimeout+getResultContextPadding-getResultMaxTimeout, handler.requests[1].options.Wait, float64(time.Millisecond*50))
+	require.Equal(t, "f/o/o", handler.requests[0].operation)
+	require.Equal(t, "a/sync", handler.requests[0].operationID)
 }
 
 func TestWaitResult_StillRunning(t *testing.T) {
@@ -126,7 +129,7 @@ func TestPeekResult_StillRunning(t *testing.T) {
 	require.ErrorIs(t, err, ErrOperationStillRunning)
 	require.Nil(t, response)
 	require.Equal(t, 1, len(handler.requests))
-	require.Equal(t, time.Duration(0), handler.requests[0].Wait)
+	require.Equal(t, time.Duration(0), handler.requests[0].options.Wait)
 }
 
 func TestPeekResult_Success(t *testing.T) {

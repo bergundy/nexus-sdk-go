@@ -28,16 +28,16 @@ func (h *myHandler) StartOperation(ctx context.Context, operation string, input 
 }
 
 // GetOperationResult implements the Handler interface.
-func (h *myHandler) GetOperationResult(ctx context.Context, request *nexus.GetOperationResultRequest) (*nexus.OperationResponseSync, error) {
-	if err := h.authorize(ctx, request.HTTPRequest.Header); err != nil {
+func (h *myHandler) GetOperationResult(ctx context.Context, operation, operationID string, options nexus.GetOperationResultOptions) (any, error) {
+	if err := h.authorize(ctx, options.Header); err != nil {
 		return nil, err
 	}
-	if request.Wait > 0 { // request is a long poll
+	if options.Wait > 0 { // request is a long poll
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, request.Wait)
+		ctx, cancel = context.WithTimeout(ctx, options.Wait)
 		defer cancel()
 
-		result, err := h.pollOperation(ctx, request.Wait)
+		result, err := h.pollOperation(ctx, options.Wait)
 		if err != nil {
 			// Translate deadline exceeded to "OperationStillRunning", this may or may not be semantically correct for
 			// your application.
@@ -50,14 +50,14 @@ func (h *myHandler) GetOperationResult(ctx context.Context, request *nexus.GetOp
 			// Optionally expose the error details to the caller.
 			return nil, &nexus.UnsuccessfulOperationError{State: nexus.OperationStateFailed, Failure: nexus.Failure{Message: err.Error()}}
 		}
-		return &nexus.OperationResponseSync{result}, nil
+		return result, nil
 	} else {
 		result, err := h.peekOperation(ctx)
 		if err != nil {
 			// Optionally translate to operation failure (could also result in canceled state).
 			return nil, &nexus.UnsuccessfulOperationError{State: nexus.OperationStateFailed, Failure: nexus.Failure{Message: err.Error()}}
 		}
-		return &nexus.OperationResponseSync{result}, nil
+		return result, nil
 	}
 }
 

@@ -17,7 +17,7 @@ func (h *UnimplementedHandler) StartOperation(ctx context.Context, operation str
 }
 
 // GetOperationResult implements the Handler interface.
-func (h *UnimplementedHandler) GetOperationResult(ctx context.Context, request *GetOperationResultRequest) (*OperationResponseSync, error) {
+func (h *UnimplementedHandler) GetOperationResult(ctx context.Context, operation, operationID string, options GetOperationResultOptions) (any, error) {
 	return nil, &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }
 
