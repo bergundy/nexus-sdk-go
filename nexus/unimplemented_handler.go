@@ -12,7 +12,7 @@ type UnimplementedHandler struct{}
 func (h *UnimplementedHandler) mustEmbedUnimplementedHandler() {}
 
 // StartOperation implements the Handler interface.
-func (h *UnimplementedHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
+func (h *UnimplementedHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
 	return nil, &HandlerError{HandlerErrorTypeNotImplemented, &Failure{Message: "not implemented"}}
 }
 

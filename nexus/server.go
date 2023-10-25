@@ -1,7 +1,6 @@
 package nexus
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,23 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 )
-
-// StartOperationRequest is input for Handler.StartOperation.
-type StartOperationRequest struct {
-	// Operation name.
-	Operation string
-	// Request ID, should be used to dedupe start requests.
-	RequestID string
-	// Callback URL to call upon completion if the started operation is async.
-	CallbackURL string
-	// The original HTTP request.
-	// Read the URL, Header, and Body of the request to process the operation input.
-	HTTPRequest *http.Request
-}
 
 // GetOperationResultRequest is input for Handler.GetOperationResult.
 type GetOperationResultRequest struct {
@@ -73,37 +60,31 @@ type OperationResponse interface {
 
 // Indicates that an operation completed successfully.
 type OperationResponseSync struct {
-	// Header to deliver in the HTTP response.
-	Header http.Header
-	// Body conveying the operation result.
-	// If it is an [io.Closer] it will be automatically closed by the framework.
-	Body io.Reader
-}
-
-// NewOperationResponseSync constructs an [OperationResponseSync], setting the proper Content-Type header.
-// Marhsals the provided value to JSON using [json.Marshal].
-func NewOperationResponseSync(v any) (*OperationResponseSync, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	header := make(http.Header)
-	header.Set(headerContentType, contentTypeJSON)
-	return &OperationResponseSync{
-		Header: header,
-		Body:   bytes.NewReader(b),
-	}, nil
+	Value any
 }
 
 func (r *OperationResponseSync) applyToHTTPResponse(writer http.ResponseWriter, handler *httpHandler) {
+	var stream *Stream
+	if s, ok := r.Value.(*Stream); ok {
+		if closer, ok := stream.Reader.(io.Closer); ok {
+			// Close the request body in case we error before sending the HTTP request (which may double close but
+			// that's fine since we ignore the error).
+			defer closer.Close()
+		}
+		stream = s
+	} else {
+		var err error
+		if stream, err = handler.options.Codec.Serialize(r.Value); err != nil {
+			handler.writeFailure(writer, fmt.Errorf("failed to serialize handler result: %w", err))
+			return
+		}
+	}
+
 	header := writer.Header()
-	for k, v := range r.Header {
-		header[k] = v
+	for k, v := range stream.Header {
+		header.Set(k, v)
 	}
-	if closer, ok := r.Body.(io.Closer); ok {
-		defer closer.Close()
-	}
-	if _, err := io.Copy(writer, r.Body); err != nil {
+	if _, err := io.Copy(writer, stream.Reader); err != nil {
 		handler.logger.Error("failed to write response body", "error", err)
 	}
 }
@@ -144,7 +125,7 @@ type Handler interface {
 	// StartOperation handles requests for starting an operation. Return [OperationResponseSync] to respond successfully
 	// - inline, or [OperationResponseAsync] to indicate that an asynchronous operation was started.
 	// Return an [UnsuccessfulOperationError] to indicate that an operation completed as failed or canceled.
-	StartOperation(context.Context, *StartOperationRequest) (OperationResponse, error)
+	StartOperation(context.Context, string, *EncodedStream, StartOperationOptions) (OperationResponse, error)
 	// GetOperationResult handles requests to get the result of an asynchronous operation. Return
 	// [OperationResponseSync] to respond successfully - inline, or error with [ErrOperationStillRunning] to indicate
 	// that an asynchronous operation is still running.
@@ -310,13 +291,25 @@ func (h *httpHandler) startOperation(writer http.ResponseWriter, request *http.R
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
 		return
 	}
-	handlerRequest := &StartOperationRequest{
-		Operation:   operation,
+	options := StartOperationOptions{
 		RequestID:   request.Header.Get(headerRequestID),
 		CallbackURL: request.URL.Query().Get(queryCallbackURL),
-		HTTPRequest: request,
+		Header:      request.Header,
 	}
-	response, err := h.options.Handler.StartOperation(request.Context(), handlerRequest)
+	header := make(map[string]string)
+	for k, vs := range request.Header {
+		if strings.HasPrefix(k, "Content-") {
+			header[k] = vs[0]
+		}
+	}
+	stream := &EncodedStream{
+		codec: h.options.Codec,
+		stream: &Stream{
+			Header: header,
+			Reader: request.Body,
+		},
+	}
+	response, err := h.options.Handler.StartOperation(request.Context(), operation, stream, options)
 	if err != nil {
 		h.writeFailure(writer, err)
 	} else {
@@ -434,6 +427,7 @@ type HandlerOptions struct {
 	//
 	// Defaults to one minute.
 	GetResultTimeout time.Duration
+	Codec            Codec
 }
 
 // NewHTTPHandler constructs an [http.Handler] from given options for handling Nexus service requests.
@@ -443,6 +437,9 @@ func NewHTTPHandler(options HandlerOptions) http.Handler {
 	}
 	if options.GetResultTimeout == 0 {
 		options.GetResultTimeout = time.Minute
+	}
+	if options.Codec == nil {
+		options.Codec = DefaultCodec
 	}
 	handler := &httpHandler{
 		baseHTTPHandler: baseHTTPHandler{

@@ -1,7 +1,6 @@
 package nexus
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"testing"
@@ -14,21 +13,22 @@ type successHandler struct {
 	UnimplementedHandler
 }
 
-func (h *successHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
-	if request.Operation != "i need to/be escaped" {
-		return nil, newBadRequestError("unexpected operation: %s", request.Operation)
+func (h *successHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+	var body []byte
+	if err := input.Read(&body); err != nil {
+		return nil, err
 	}
-	if request.CallbackURL != "http://test/callback" {
-		return nil, newBadRequestError("unexpected callback URL: %s", request.CallbackURL)
+	if operation != "i need to/be escaped" {
+		return nil, newBadRequestError("unexpected operation: %s", operation)
 	}
-	if request.HTTPRequest.Header.Get("User-Agent") != userAgent {
-		return nil, newBadRequestError("invalid 'User-Agent' header: %q", request.HTTPRequest.Header.Get("User-Agent"))
+	if options.CallbackURL != "http://test/callback" {
+		return nil, newBadRequestError("unexpected callback URL: %s", options.CallbackURL)
+	}
+	if options.Header.Get("User-Agent") != userAgent {
+		return nil, newBadRequestError("invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
 	}
 
-	return &OperationResponseSync{
-		Header: request.HTTPRequest.Header.Clone(),
-		Body:   request.HTTPRequest.Body,
-	}, nil
+	return &OperationResponseSync{body}, nil
 }
 
 func TestSuccess(t *testing.T) {
@@ -54,10 +54,9 @@ type requestIDEchoHandler struct {
 	UnimplementedHandler
 }
 
-func (h *requestIDEchoHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
+func (h *requestIDEchoHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
 	return &OperationResponseSync{
-		Body:   bytes.NewReader([]byte(request.RequestID)),
-		Header: http.Header{"Content-Type": []string{"application/octet-stream"}},
+		Value: []byte(options.RequestID),
 	}, nil
 }
 
@@ -126,8 +125,8 @@ type jsonHandler struct {
 	UnimplementedHandler
 }
 
-func (h *jsonHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
-	return NewOperationResponseSync("success")
+func (h *jsonHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+	return &OperationResponseSync{Value: "success"}, nil
 }
 
 func TestJSON(t *testing.T) {
@@ -148,7 +147,7 @@ type asyncHandler struct {
 	UnimplementedHandler
 }
 
-func (h *asyncHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
+func (h *asyncHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
 	return &OperationResponseAsync{
 		OperationID: "async",
 	}, nil
@@ -167,10 +166,10 @@ type unsuccessfulHandler struct {
 	UnimplementedHandler
 }
 
-func (h *unsuccessfulHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
+func (h *unsuccessfulHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
 	return nil, &UnsuccessfulOperationError{
 		// We're passing the desired state via request ID in this test.
-		State: OperationState(request.RequestID),
+		State: OperationState(options.RequestID),
 		Failure: Failure{
 			Message: "intentional",
 		},

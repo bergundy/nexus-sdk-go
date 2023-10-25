@@ -1,7 +1,6 @@
 package nexus
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"testing"
@@ -17,7 +16,7 @@ type asyncWithResultHandler struct {
 	requests     []*GetOperationResultRequest
 }
 
-func (h *asyncWithResultHandler) StartOperation(ctx context.Context, request *StartOperationRequest) (OperationResponse, error) {
+func (h *asyncWithResultHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
 	return &OperationResponseAsync{
 		OperationID: "a/sync",
 	}, nil
@@ -28,8 +27,7 @@ func (h *asyncWithResultHandler) getResult(request *GetOperationResultRequest) (
 		return nil, h.resultError
 	}
 	return &OperationResponseSync{
-		Header: http.Header{"Content-Type": []string{"application/octet-stream"}},
-		Body:   bytes.NewReader([]byte("body")),
+		Value: []byte("body"),
 	}, nil
 }
 

@@ -18,8 +18,8 @@ type MyResult struct {
 }
 
 // StartOperation implements the Handler interface.
-func (h *myHandler) StartOperation(ctx context.Context, request *nexus.StartOperationRequest) (nexus.OperationResponse, error) {
-	if err := h.authorize(ctx, request.HTTPRequest); err != nil {
+func (h *myHandler) StartOperation(ctx context.Context, operation string, input *nexus.EncodedStream, options nexus.StartOperationOptions) (nexus.OperationResponse, error) {
+	if err := h.authorize(ctx, options.Header); err != nil {
 		return nil, err
 	}
 	return &nexus.OperationResponseAsync{
@@ -29,7 +29,7 @@ func (h *myHandler) StartOperation(ctx context.Context, request *nexus.StartOper
 
 // GetOperationResult implements the Handler interface.
 func (h *myHandler) GetOperationResult(ctx context.Context, request *nexus.GetOperationResultRequest) (*nexus.OperationResponseSync, error) {
-	if err := h.authorize(ctx, request.HTTPRequest); err != nil {
+	if err := h.authorize(ctx, request.HTTPRequest.Header); err != nil {
 		return nil, err
 	}
 	if request.Wait > 0 { // request is a long poll
@@ -50,14 +50,14 @@ func (h *myHandler) GetOperationResult(ctx context.Context, request *nexus.GetOp
 			// Optionally expose the error details to the caller.
 			return nil, &nexus.UnsuccessfulOperationError{State: nexus.OperationStateFailed, Failure: nexus.Failure{Message: err.Error()}}
 		}
-		return nexus.NewOperationResponseSync(result)
+		return &nexus.OperationResponseSync{result}, nil
 	} else {
 		result, err := h.peekOperation(ctx)
 		if err != nil {
 			// Optionally translate to operation failure (could also result in canceled state).
 			return nil, &nexus.UnsuccessfulOperationError{State: nexus.OperationStateFailed, Failure: nexus.Failure{Message: err.Error()}}
 		}
-		return nexus.NewOperationResponseSync(result)
+		return &nexus.OperationResponseSync{result}, nil
 	}
 }
 
@@ -79,9 +79,9 @@ func (h *myHandler) peekOperation(ctx context.Context) (*MyResult, error) {
 	panic("unimplemented")
 }
 
-func (h *myHandler) authorize(ctx context.Context, request *http.Request) error {
+func (h *myHandler) authorize(ctx context.Context, header http.Header) error {
 	// Authorization for demo purposes
-	if request.Header.Get("Authorization") != "Bearer top-secret" {
+	if header.Get("Authorization") != "Bearer top-secret" {
 		return &nexus.HandlerError{Type: nexus.HandlerErrorTypeUnauthorized, Failure: &nexus.Failure{Message: "Unauthorized"}}
 	}
 	return nil
