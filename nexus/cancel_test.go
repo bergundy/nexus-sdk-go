@@ -13,7 +13,7 @@ type asyncWithCancelHandler struct {
 	UnimplementedHandler
 }
 
-func (h *asyncWithCancelHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+func (h *asyncWithCancelHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
 	return &OperationResponseAsync{
 		OperationID: "a/sync",
 	}, nil

@@ -13,7 +13,7 @@ type successHandler struct {
 	UnimplementedHandler
 }
 
-func (h *successHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+func (h *successHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
 	var body []byte
 	if err := input.Read(&body); err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (h *successHandler) StartOperation(ctx context.Context, operation string, i
 		return nil, newBadRequestError("invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
 	}
 
-	return &OperationResponseSync{body}, nil
+	return &OperationResponseSync[any]{body}, nil
 }
 
 func TestSuccess(t *testing.T) {
@@ -54,8 +54,8 @@ type requestIDEchoHandler struct {
 	UnimplementedHandler
 }
 
-func (h *requestIDEchoHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
-	return &OperationResponseSync{
+func (h *requestIDEchoHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
+	return &OperationResponseSync[any]{
 		Value: []byte(options.RequestID),
 	}, nil
 }
@@ -125,8 +125,8 @@ type jsonHandler struct {
 	UnimplementedHandler
 }
 
-func (h *jsonHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
-	return &OperationResponseSync{Value: "success"}, nil
+func (h *jsonHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
+	return &OperationResponseSync[any]{Value: "success"}, nil
 }
 
 func TestJSON(t *testing.T) {
@@ -147,7 +147,7 @@ type asyncHandler struct {
 	UnimplementedHandler
 }
 
-func (h *asyncHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+func (h *asyncHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
 	return &OperationResponseAsync{
 		OperationID: "async",
 	}, nil
@@ -166,7 +166,7 @@ type unsuccessfulHandler struct {
 	UnimplementedHandler
 }
 
-func (h *unsuccessfulHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+func (h *unsuccessfulHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
 	return nil, &UnsuccessfulOperationError{
 		// We're passing the desired state via request ID in this test.
 		State: OperationState(options.RequestID),

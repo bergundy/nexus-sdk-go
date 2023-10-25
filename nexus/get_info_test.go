@@ -13,7 +13,7 @@ type asyncWithInfoHandler struct {
 	expectHeader bool
 }
 
-func (h *asyncWithInfoHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+func (h *asyncWithInfoHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
 	return &OperationResponseAsync{
 		OperationID: "needs /URL/ escaping",
 	}, nil

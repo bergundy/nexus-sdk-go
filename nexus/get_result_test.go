@@ -21,7 +21,7 @@ type asyncWithResultHandler struct {
 	requests     []request
 }
 
-func (h *asyncWithResultHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error) {
+func (h *asyncWithResultHandler) StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error) {
 	return &OperationResponseAsync{
 		OperationID: "a/sync",
 	}, nil

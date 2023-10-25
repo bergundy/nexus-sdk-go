@@ -18,7 +18,7 @@ type MyResult struct {
 }
 
 // StartOperation implements the Handler interface.
-func (h *myHandler) StartOperation(ctx context.Context, operation string, input *nexus.EncodedStream, options nexus.StartOperationOptions) (nexus.OperationResponse, error) {
+func (h *myHandler) StartOperation(ctx context.Context, operation string, input *nexus.EncodedStream, options nexus.StartOperationOptions) (nexus.OperationResponse[any], error) {
 	if err := h.authorize(ctx, options.Header); err != nil {
 		return nil, err
 	}

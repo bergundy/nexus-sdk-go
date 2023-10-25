@@ -18,16 +18,16 @@ import (
 
 // An OperationResponse is the return type from the handler StartOperation and GetResult methods. It has two
 // implementations: [OperationResponseSync] and [OperationResponseAsync].
-type OperationResponse interface {
+type OperationResponse[T any] interface {
 	applyToHTTPResponse(http.ResponseWriter, *httpHandler)
 }
 
 // Indicates that an operation completed successfully.
-type OperationResponseSync struct {
-	Value any
+type OperationResponseSync[T any] struct {
+	Value T
 }
 
-func (r *OperationResponseSync) applyToHTTPResponse(writer http.ResponseWriter, handler *httpHandler) {
+func (r *OperationResponseSync[T]) applyToHTTPResponse(writer http.ResponseWriter, handler *httpHandler) {
 	handler.writeResult(writer, r.Value)
 }
 
@@ -67,7 +67,7 @@ type Handler interface {
 	// StartOperation handles requests for starting an operation. Return [OperationResponseSync] to respond successfully
 	// - inline, or [OperationResponseAsync] to indicate that an asynchronous operation was started.
 	// Return an [UnsuccessfulOperationError] to indicate that an operation completed as failed or canceled.
-	StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse, error)
+	StartOperation(ctx context.Context, operation string, input *EncodedStream, options StartOperationOptions) (OperationResponse[any], error)
 	// GetOperationResult handles requests to get the result of an asynchronous operation. Return
 	// [OperationResponseSync] to respond successfully - inline, or error with [ErrOperationStillRunning] to indicate
 	// that an asynchronous operation is still running.
@@ -254,7 +254,7 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 }
 
 func (h *httpHandler) startOperation(writer http.ResponseWriter, request *http.Request) {
-	operation, err := url.PathUnescape(path.Base(request.URL.RawPath))
+	operation, err := url.PathUnescape(path.Base(request.URL.EscapedPath()))
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
 		return
@@ -287,7 +287,7 @@ func (h *httpHandler) startOperation(writer http.ResponseWriter, request *http.R
 
 func (h *httpHandler) getOperationResult(writer http.ResponseWriter, request *http.Request) {
 	// strip /result
-	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.RawPath))
+	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.EscapedPath()))
 	operationID, err := url.PathUnescape(operationIDEscaped)
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
@@ -330,7 +330,7 @@ func (h *httpHandler) getOperationResult(writer http.ResponseWriter, request *ht
 }
 
 func (h *httpHandler) getOperationInfo(writer http.ResponseWriter, request *http.Request) {
-	prefix, operationIDEscaped := path.Split(request.URL.RawPath)
+	prefix, operationIDEscaped := path.Split(request.URL.EscapedPath())
 	operationID, err := url.PathUnescape(operationIDEscaped)
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
@@ -362,7 +362,7 @@ func (h *httpHandler) getOperationInfo(writer http.ResponseWriter, request *http
 
 func (h *httpHandler) cancelOperation(writer http.ResponseWriter, request *http.Request) {
 	// strip /cancel
-	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.RawPath))
+	prefix, operationIDEscaped := path.Split(path.Dir(request.URL.EscapedPath()))
 	operationID, err := url.PathUnescape(operationIDEscaped)
 	if err != nil {
 		h.writeFailure(writer, newBadRequestError("failed to parse URL path"))
