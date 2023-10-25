@@ -153,7 +153,10 @@ func (c *Client) StartOperation(ctx context.Context, operation string, input any
 			// that's fine since we ignore the error).
 			defer closer.Close()
 		}
-		stream = s
+		var err error
+		if stream, err = c.options.Codec.Encode(s); err != nil {
+			return nil, err
+		}
 	} else {
 		var err error
 		if stream, err = c.options.Codec.Serialize(input); err != nil {

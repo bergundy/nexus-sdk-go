@@ -31,16 +31,26 @@ func (s *EncodedStream) Close() error {
 	return nil
 }
 
-type Codec interface {
+type ValueCodec interface {
 	Serialize(any) (*Stream, error)
 	Deserialize(*Stream, any) error
 }
 
-type CodecChain []Codec
+type ByteCodec interface {
+	Encode(*Stream) (*Stream, error)
+	Decode(*Stream) (*Stream, error)
+}
+
+type Codec interface {
+	ValueCodec
+	ByteCodec
+}
+
+type ValueCodecChain []ValueCodec
 
 var ErrCodecIncompatible = errors.New("incompatible codec")
 
-func (c CodecChain) Serialize(v any) (*Stream, error) {
+func (c ValueCodecChain) Serialize(v any) (*Stream, error) {
 	for _, l := range c {
 		p, err := l.Serialize(v)
 		if err != nil {
@@ -54,7 +64,7 @@ func (c CodecChain) Serialize(v any) (*Stream, error) {
 	return nil, ErrCodecIncompatible
 }
 
-func (c CodecChain) Deserialize(s *Stream, v any) error {
+func (c ValueCodecChain) Deserialize(s *Stream, v any) error {
 	lenc := len(c)
 	for i := range c {
 		l := c[lenc-i-1]
@@ -69,7 +79,7 @@ func (c CodecChain) Deserialize(s *Stream, v any) error {
 	return ErrCodecIncompatible
 }
 
-var _ Codec = CodecChain{}
+var _ ValueCodec = ValueCodecChain{}
 
 type JSONCodec struct{}
 
@@ -99,7 +109,7 @@ func (JSONCodec) Serialize(v any) (*Stream, error) {
 	}, nil
 }
 
-var _ Codec = JSONCodec{}
+var _ ValueCodec = JSONCodec{}
 
 type NilCodec struct{}
 
@@ -121,7 +131,7 @@ func (NilCodec) Serialize(v any) (*Stream, error) {
 	}, nil
 }
 
-var _ Codec = NilCodec{}
+var _ ValueCodec = NilCodec{}
 
 type ByteSliceCodec struct{}
 
@@ -154,6 +164,26 @@ func (ByteSliceCodec) Serialize(v any) (*Stream, error) {
 	return nil, ErrCodecIncompatible
 }
 
-var _ Codec = NilCodec{}
+var _ ValueCodec = NilCodec{}
 
-var DefaultCodec = CodecChain([]Codec{NilCodec{}, ByteSliceCodec{}, JSONCodec{}})
+type CompositeCodec struct {
+	ValueCodecChain
+	ByteCodecChain
+}
+
+type ByteCodecChain []ByteCodec
+
+func (c ByteCodecChain) Encode(s *Stream) (*Stream, error) {
+	// TODO
+	return s, nil
+}
+
+func (c ByteCodecChain) Decode(s *Stream) (*Stream, error) {
+	// TODO
+	return s, nil
+}
+
+var DefaultCodec Codec = CompositeCodec{
+	ValueCodecChain([]ValueCodec{NilCodec{}, ByteSliceCodec{}, JSONCodec{}}),
+	ByteCodecChain([]ByteCodec{}),
+}
